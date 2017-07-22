@@ -1,32 +1,28 @@
 #!/bin/bash
-# OpenVPN road warrior installer for Debian, Ubuntu and CentOS
+# Универсальный скрипт установки OpenVPN на операционные системы Debian, Ubuntu и CentOS
 
-# This script will work on Debian, Ubuntu, CentOS and probably other distros
-# of the same families, although no support is offered for them. It isn't
-# bulletproof but it will probably work if you simply want to setup a VPN on
-# your Debian/Ubuntu/CentOS box. It has been designed to be as unobtrusive and
-# universal as possible.
+# Этот скрипт будет работать на Debian, Ubuntu, CentOS и, возможно, на их
+# производных дистрибутивах
 
 
-# Detect Debian users running the script with "sh" instead of bash
+# Обнаруживаем пользователей Debian, запускающих скрипт с помощью «sh» вместо bash
 if readlink /proc/$$/exe | grep -qs "dash"; then
-	echo "This script needs to be run with bash, not sh"
+	echo "Этот сценарий должен быть запущен с bash, а не shThis script needs to be run with bash, not sh"
 	exit 1
 fi
 
 if [[ "$EUID" -ne 0 ]]; then
-	echo "Sorry, you need to run this as root"
+	echo "Этот скрипт нужно запускать с правами root"
 	exit 2
 fi
 
 if [[ ! -e /dev/net/tun ]]; then
-	echo "The TUN device is not available
-You need to enable TUN before running this script"
+	echo "Не обнаружена поддержка TUN. Включите TUN перед запуском скрипта"
 	exit 3
 fi
 
 if grep -qs "CentOS release 5" "/etc/redhat-release"; then
-	echo "CentOS 5 is too old and not supported"
+	echo "CentOS 5 слишком старый, установка не возможна"
 	exit 4
 fi
 if [[ -e /etc/debian_version ]]; then
@@ -38,12 +34,12 @@ elif [[ -e /etc/centos-release || -e /etc/redhat-release ]]; then
 	GROUPNAME=nobody
 	RCLOCAL='/etc/rc.d/rc.local'
 else
-	echo "Looks like you aren't running this installer on Debian, Ubuntu or CentOS"
+	echo "Ваша операционная система не из семейств Debian, Ubuntu или CentOS"
 	exit 5
 fi
 
 newclient () {
-	# Generates the custom client.ovpn
+	# Создаем файл client.ovpn
 	cp /etc/openvpn/client-common.txt ~/$1.ovpn
 	echo "<ca>" >> ~/$1.ovpn
 	cat /etc/openvpn/easy-rsa/pki/ca.crt >> ~/$1.ovpn
@@ -59,9 +55,7 @@ newclient () {
 	echo "</tls-auth>" >> ~/$1.ovpn
 }
 
-# Try to get our IP from the system and fallback to the Internet.
-# I do this to make the script compatible with NATed servers (lowendspirit.com)
-# and to avoid getting an IPv6.
+# Пробуем получить наш IP адрес
 IP=$(ip addr | grep 'inet' | grep -v inet6 | grep -vE '127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | grep -o -E '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | head -1)
 if [[ "$IP" = "" ]]; then
 		IP=$(wget -4qO- "http://whatismyip.akamai.com/")
@@ -71,18 +65,18 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 	while :
 	do
 	clear
-		echo "Looks like OpenVPN is already installed"
+		echo "OpenVPN уже установлен"
 		echo ""
-		echo "What do you want to do?"
-		echo "   1) Add a new user"
-		echo "   2) Revoke an existing user"
-		echo "   3) Remove OpenVPN"
-		echo "   4) Exit"
-		read -p "Select an option [1-4]: " option
+		echo "Что вы хотите сделать?"
+		echo "   1) Добавить пользователя"
+		echo "   2) Удалить сущетвующего пользвателя"
+		echo "   3) Удалить OpenVPN"
+		echo "   4) Завершить работу скрипта"
+		read -p "Выберите вариант [1-4]: " option
 		case $option in
 			1) 
 			echo ""
-			echo "Tell me a name for the client certificate"
+			echo "Введите имя для сертификата нового клиента"
 			echo "Please, use one word only, no special characters"
 			read -p "Client name: " -e -i client CLIENT
 			cd /etc/openvpn/easy-rsa/
@@ -179,7 +173,7 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 	done
 else
 	clear
-	echo 'Welcome to this quick OpenVPN "road warrior" installer'
+	echo 'Начинаем установку OpenVPN вместе с SecFAll.com'
 	echo ""
 	# OpenVPN setup and first user creation
 	echo "I need to ask you a few questions before starting the setup"
