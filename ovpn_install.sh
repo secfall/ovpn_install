@@ -177,12 +177,13 @@ else
 	# Установка OpenVPN и создание первого пользователя
 	echo "Несколько вопросов перед началом установки"
 	echo "Вы можете оставлять параметры по умолчанию и просто нажимать «Enter», если они вас устраивают."
+	echo "Если хотите изменить параметр, то сотрите предлагаемое значение и введите своё"
 	echo ""
 	echo "Для начала введите IP адрес, на который OpenVPN будет принимать подкючения"
-	echo "Если атоматически опредлённый IP адрес правильный, просто нажмите Enter"
+	echo "Если автоматически определённый IP адрес правильный, просто нажмите Enter"
 	read -p "Определён IP адрес: " -e -i $IP IP
 	echo ""
-	echo "Какой протокл будем использовать?"
+	echo "Какой протокол будем использовать?"
 	echo "   1) UDP (рекомендуется)"
 	echo "   2) TCP"
 	read -p "Протокол [1-2]: " -e -i 1 PROTOCOL
@@ -199,7 +200,7 @@ else
 	read -p "Порт: " -e -i 443 PORT
 	echo ""
 	echo "Какой DNS вы хотите использовать в своей VPN?"
-	echo "   1) Текщие системные настройки"
+	echo "   1) Текущие системные настройки"
 	echo "   2) Google"
 	read -p "DNS [1-2]: " -e -i 2 DNS
 	echo ""
@@ -209,18 +210,19 @@ else
 	echo ""
 	echo "А теперь введите начальные данные для корневого сертификата"
 	echo "Они ни на что не влияют"
-	echo "В скобках вам будут предложены дефолтные значения"
-	echo "Просто жмите Enter если они вас устраивают"
-	read -p "Регион [Russia]: " -e -i Russia EASYRSA_REQ_PROVINCE
-	read -p "Город [Moscow]: " -e -i Moscow EASYRSA_REQ_CITY
-	read -p "Название организации [RosComNadzor]: " -e -i RosComNadzor EASYRSA_REQ_ORG
-	read -p "E-mail [admin@rkn.ru]: " -e -i admin@rkn.ru EASYRSA_REQ_EMAIL
-	read -p "Подразделение [OtdelBesnennogoPrintera]: " -e -i OtdelBesnennogoPrintera EASYRSA_REQ_OU
-	echo "Отлично, информации достаточно. Сейчас мы установим OpenVPN сервер"
+	echo "Вам будут предложены дефолтные значения"
+	echo "Просто жмите Enter если они вас устраивают."
+	echo "Если нет, то сотрите и введите свои."
+	read -p "Регион: " -e -i Russia EASYRSA_REQ_PROVINCE
+	read -p "Город: " -e -i Moscow EASYRSA_REQ_CITY
+	read -p "Название организации: " -e -i RosComNadzor EASYRSA_REQ_ORG
+	read -p "E-mail: " -e -i admin@rkn.ru EASYRSA_REQ_EMAIL
+	read -p "Подразделение: " -e -i OtdelBeshennogoPrintera EASYRSA_REQ_OU
+	echo "Отлично. Сейчас обновим сервер и выполним первичную установку OpenVPN."
 	read -n1 -r -p "Нажмите любую кнопку для продолжения..."
 	yum install epel-release -y
 	yum update -y
-	yum upgrade -y
+	#yum upgrade -y
 	yum install openvpn iptables wget zip unzip -y
 	# Удаляем старые версииf easy-rsa
 	if [[ -d /etc/openvpn/easy-rsa/ ]]; then
@@ -263,7 +265,7 @@ else
 	#./easyrsa gen-dh
 	echo "Сейчас будут созданы сертификаты сервера и клиента,"
 	echo "а также список отозваных сертификатов"
-	echo "На запрос key: введите пароль от корневого сертификата.
+	echo "На запрос key: введите пароль от корневого сертификата."
 	read -n1 -r -p "Нажмите любую кнопку для продолжения..."
 	echo "Создаем сертификат сервера..."
 	./easyrsa build-server-full server nopass
