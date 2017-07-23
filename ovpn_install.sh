@@ -245,7 +245,7 @@ else
 	echo 'set_var EASYRSA_REQ_ORG "$EASYRSA_REQ_ORG"' >> /etc/openvpn/keys/easy-rsa-master/easyrsa3/vars
 	echo 'set_var EASYRSA_REQ_EMAILE "$EASYRSA_REQ_EMAIL"' >> /etc/openvpn/keys/easy-rsa-master/easyrsa3/vars
 	echo 'set_var EASYRSA_REQ_OU "$EASYRSA_REQ_OU"' >> /etc/openvpn/keys/easy-rsa-master/easyrsa3/vars
-	echo 'set_var EASYRSA_KEY_SIZE "4096"' >> /etc/openvpn/keys/easy-rsa-master/easyrsa3/vars
+	echo 'set_var EASYRSA_KEY_SIZE "2048"' >> /etc/openvpn/keys/easy-rsa-master/easyrsa3/vars
 	echo 'set_var EASYRSA_DIGEST "sha256"' >> /etc/openvpn/keys/easy-rsa-master/easyrsa3/vars
 	# Создаём PKI, создаём CA, ключ DH а также сертификаты сервера и клиента
 	./easyrsa init-pki
@@ -262,7 +262,7 @@ else
 	echo "Это займет МНОГО времени!"
 	echo ""
 	echo ""
-	#./easyrsa gen-dh
+	./easyrsa gen-dh
 	echo "Сейчас будут созданы сертификаты сервера и клиента,"
 	echo "а также список отозваных сертификатов"
 	echo "На запрос key: введите пароль от корневого сертификата."
@@ -433,14 +433,14 @@ WantedBy=multi-user.target' > /etc/systemd/system/ipt-settings.service
 	echo "client
 dev tun
 proto $PROTOCOL
-remote $IP
+remote $IP $PORT
 resolv-retry infinite
 nobind
 block-outside-dns
 persist-key
 persist-tun
 mute-replay-warnings
-remote-cert-eku "TLS Web Server Authentication"
+remote-cert-eku \"TLS Web Server Authentication\"
 remote-cert-tls server
 tls-client
 verb 3" > /etc/openvpn/client-common.txt
