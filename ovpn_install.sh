@@ -271,7 +271,7 @@ dh dh.pem
 crl-verify crl.pem
  
 server 10.8.0.0 255.255.255.0
-ifconfig-pool-persist ipp.txt" >> /etc/openvpn/server.conf
+ifconfig-pool-persist ipp.txt" > /etc/openvpn/server.conf
 	echo 'push "redirect-gateway def1" ' >> /etc/openvpn/server.conf
 	# DNS
 	case $DNS in
@@ -305,40 +305,43 @@ persist-tun
 status openvpn-status.log
 log openvpn.log
 verb 4" >> /etc/openvpn/server.conf
+	echo "server.conf создан..."
 
-	#Создадим файл ipt-set
-	#Определим названием внешенего интерфейса. Не самый оптимальный вариант, но сходу лучше не придумал
+	#Определим названием внешнего интерфейса. Не самый оптимальный вариант, но сходу лучше не придумал
 	IF_EXT=$(ip r l | grep default | cut -d " " -f 5)
-	echo "#!/bin/sh
-IF_EXT="$IF_EXT"
-IF_OVPN="tun0"
-OVPN_PORT="$PORT"
-IPT="/sbin/iptables"
-IPT6="/sbin/ip6tables"
+	echo "Определили внешний интерфейс как $IF_EXT..."
+	#Создадим скрипт сетевых настроек. Он будет применятся при каждой перезагрузке
+	echo '#!/bin/sh' > /root/ipt-set
+	echo "IF_EXT=\"$IF_EXT\"
+IF_OVPN=\"tun0\"
+OVPN_PORT=\"$PORT\"
+IPT=\"/sbin/iptables\"
+IPT6=\"/sbin/ip6tables\"
 
 # flush
-$IPT --flush
-$IPT -t nat --flush
-$IPT -t mangle --flush
-$IPT -X
-$IPT6 --flush
+\$IPT --flush
+\$IPT -t nat --flush
+\$IPT -t mangle --flush
+\$IPT -X
+\$IPT6 --flush
 
 # loopback
-$IPT -A INPUT -i lo -j ACCEPT
-$IPT -A OUTPUT -o lo -j ACCEPT
+\$IPT -A INPUT -i lo -j ACCEPT
+\$IPT -A OUTPUT -o lo -j ACCEPT
 
 # default
-$IPT -P INPUT DROP
-$IPT -P OUTPUT DROP
-$IPT -P FORWARD DROP
-$IPT6 -P INPUT DROP
-$IPT6 -P OUTPUT DROP
-$IPT6 -P FORWARD DROP
+\$IPT -P INPUT DROP
+\$IPT -P OUTPUT DROP
+\$IPT -P FORWARD DROP
+\$IPT6 -P INPUT DROP
+\$IPT6 -P OUTPUT DROP
+\$IPT6 -P FORWARD DROP
 
-# allow forwarding
-echo 1 > /proc/sys/net/ipv4/ip_forward
+# allow forwarding" >> /root/ipt-set
 
-# NAT
+	echo 'echo 1 > /proc/sys/net/ipv4/ip_forward' >> /root/ipt-set
+
+	echo '# NAT
 # #########################################
 # SNAT - local users to out internet
 $IPT -t nat -A POSTROUTING -o $IF_EXT -j MASQUERADE
@@ -353,13 +356,11 @@ $IPT -A INPUT -i $IF_EXT -p tcp --dport 22 -j ACCEPT
 $IPT -A INPUT -i $IF_OVPN -p icmp -s 10.8.0.0/24 -j ACCEPT
 # DNS
 $IPT -A INPUT -i $IF_OVPN -p udp --dport 53 -s 10.8.0.0/24 -j ACCEPT
-# openvpn
-$IPT -A INPUT -i $IF_EXT -p udp --dport $OVPN_PORT -j ACCEPT
-# squid
-$IPT -A INPUT -i $IF_OVPN -p tcp --dport $SQUID_PORT -j ACCEPT
-$IPT -A INPUT -i $IF_OVPN -p udp --dport $SQUID_PORT -j ACCEPT
+# openvpn' >> /root/ipt-set
 
-# FORWARD chain
+	echo "\$IPT -A INPUT -i \$IF_EXT -p $PROTOCOL --dport \$OVPN_PORT -j ACCEPT" >> /root/ipt-set
+
+	echo '# FORWARD chain
 # #########################################
 $IPT -A FORWARD -i $IF_OVPN -o $IF_EXT -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
 $IPT -A FORWARD -i $IF_EXT -o $IF_OVPN -m state --state ESTABLISHED,RELATED -j ACCEPT
@@ -367,109 +368,72 @@ $IPT -A FORWARD -s 10.8.0.0/24 -d 10.8.0.0/24 -j ACCEPT
 
 # OUTPUT chain
 # #########################################
-$IPT -A OUTPUT -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+$IPT -A OUTPUT -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT' >> /root/ipt-set
 
-	# Enable net.ipv4.ip_forward for the system
-	sed -i '/\<net.ipv4.ip_forward\>/c\net.ipv4.ip_forward=1' /etc/sysctl.conf
-	if ! grep -q "\<net.ipv4.ip_forward\>" /etc/sysctl.conf; then
-		echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf
-	fi
-	# Avoid an unneeded reboot
-	echo 1 > /proc/sys/net/ipv4/ip_forward
-	if pgrep firewalld; then
-		# Using both permanent and not permanent rules to avoid a firewalld
-		# reload.
-		# We don't use --add-service=openvpn because that would only work with
-		# the default port and protocol.
-		firewall-cmd --zone=public --add-port=$PORT/$PROTOCOL
-		firewall-cmd --zone=trusted --add-source=10.8.0.0/24
-		firewall-cmd --permanent --zone=public --add-port=$PORT/$PROTOCOL
-		firewall-cmd --permanent --zone=trusted --add-source=10.8.0.0/24
-		# Set NAT for the VPN subnet
-		firewall-cmd --direct --add-rule ipv4 nat POSTROUTING 0 -s 10.8.0.0/24 ! -d 10.8.0.0/24 -j SNAT --to $IP
-		firewall-cmd --permanent --direct --add-rule ipv4 nat POSTROUTING 0 -s 10.8.0.0/24 ! -d 10.8.0.0/24 -j SNAT --to $IP
-	else
-		chmod +x $RCLOCAL
-		# Set NAT for the VPN subnet
-		iptables -t nat -A POSTROUTING -s 10.8.0.0/24 ! -d 10.8.0.0/24 -j SNAT --to $IP
-		sed -i "1 a\iptables -t nat -A POSTROUTING -s 10.8.0.0/24 ! -d 10.8.0.0/24 -j SNAT --to $IP" $RCLOCAL
-		if iptables -L -n | grep -qE '^(REJECT|DROP)'; then
-			# If iptables has at least one REJECT rule, we asume this is needed.
-			# Not the best approach but I can't think of other and this shouldn't
-			# cause problems.
-			iptables -I INPUT -p $PROTOCOL --dport $PORT -j ACCEPT
-			iptables -I FORWARD -s 10.8.0.0/24 -j ACCEPT
-			iptables -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
-			sed -i "1 a\iptables -I INPUT -p $PROTOCOL --dport $PORT -j ACCEPT" $RCLOCAL
-			sed -i "1 a\iptables -I FORWARD -s 10.8.0.0/24 -j ACCEPT" $RCLOCAL
-			sed -i "1 a\iptables -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT" $RCLOCAL
-		fi
-	fi
-	# If SELinux is enabled and a custom port or TCP was selected, we need this
+	#Установим права на запуск
+	chmod 755 /root/ipt-set
+	echo "Файл ipt-set создан..."
+	#Сделаем свою службу для  запуска скрипта ipt-set
+	echo '[Unit]
+Description=Iptables Settings Service
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/root/ipt-set
+
+[Install]
+WantedBy=multi-user.target' > /etc/systemd/system/ipt-settings.service
+	chmod 644 /etc/systemd/system/ipt-settings.service
+	echo "Служба для запуска ipt-set создана..."
+	#Добавим в автозагрузку
+	systemctl enable ipt-settings
+	#И запустим
+	systemctl start ipt-settings
+	# Если включен SELinux, разрешим порт
 	if hash sestatus 2>/dev/null; then
 		if sestatus | grep "Current mode" | grep -qs "enforcing"; then
 			if [[ "$PORT" != '1194' || "$PROTOCOL" = 'tcp' ]]; then
-				# semanage isn't available in CentOS 6 by default
+				# semanage по умолчанию не доступен CentOS 6
 				if ! hash semanage 2>/dev/null; then
 					yum install policycoreutils-python -y
 				fi
 				semanage port -a -t openvpn_port_t -p $PROTOCOL $PORT
+				echo "Порт в semanage разрешён..."
 			fi
 		fi
 	fi
 	# And finally, restart OpenVPN
-	if [[ "$OS" = 'debian' ]]; then
-		# Little hack to check for systemd
-		if pgrep systemd-journal; then
-			systemctl restart openvpn@server.service
-		else
-			/etc/init.d/openvpn restart
-		fi
+	echo "Запуск серера OpenVPN..."
+	if pgrep systemd-journal; then
+		systemctl restart openvpn@server.service
+		systemctl enable openvpn@server.service
 	else
-		if pgrep systemd-journal; then
-			systemctl restart openvpn@server.service
-			systemctl enable openvpn@server.service
-		else
-			service openvpn restart
-			chkconfig openvpn on
-		fi
+		service openvpn restart
+		chkconfig openvpn on
 	fi
-	# Try to detect a NATed connection and ask about it to potential LowEndSpirit users
-	EXTERNALIP=$(wget -4qO- "http://whatismyip.akamai.com/")
-	if [[ "$IP" != "$EXTERNALIP" ]]; then
-		echo ""
-		echo "Looks like your server is behind a NAT!"
-		echo ""
-		echo "If your server is NATed (e.g. LowEndSpirit), I need to know the external IP"
-		echo "If that's not the case, just ignore this and leave the next field blank"
-		read -p "External IP: " -e USEREXTERNALIP
-		if [[ "$USEREXTERNALIP" != "" ]]; then
-			IP=$USEREXTERNALIP
-		fi
-	fi
-	# client-common.txt is created so we have a template to add further users later
+
+	# Client-common.txt будет нашим шаблоном для добавления новых пользователей позже
 	echo "client
 dev tun
 proto $PROTOCOL
-sndbuf 0
-rcvbuf 0
-remote $IP $PORT
+remote $IP
 resolv-retry infinite
 nobind
+block-outside-dns
 persist-key
 persist-tun
+mute-replay-warnings
+remote-cert-eku "TLS Web Server Authentication"
 remote-cert-tls server
-auth SHA512
-cipher AES-256-CBC
-comp-lzo
-setenv opt block-outside-dns
-key-direction 1
+tls-client
 verb 3" > /etc/openvpn/client-common.txt
-	# Generates the custom client.ovpn
+	# Создаём client.ovpn
 	newclient "$CLIENT"
 	echo ""
-	echo "Finished!"
+	echo "Сделано!"
 	echo ""
-	echo "Your client configuration is available at" ~/"$CLIENT.ovpn"
-	echo "If you want to add more clients, you simply need to run this script again!"
+	echo "Клиентский конфиг в файле" ~/"$CLIENT.ovpn"
+	echo "Если нужны еще клиенты, то запустите скрипт еще раз."
 fi
