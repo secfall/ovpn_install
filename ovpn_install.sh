@@ -223,7 +223,7 @@ else
 	yum install epel-release -y
 	yum update -y
 	#yum upgrade -y
-	yum install openvpn iptables wget zip unzip -y
+	yum install openvpn openssl iptables wget zip unzip -y
 	# Удаляем старые версииf easy-rsa
 	if [[ -d /etc/openvpn/easy-rsa/ ]]; then
 		rm -rf /etc/openvpn/easy-rsa/
