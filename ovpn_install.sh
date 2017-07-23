@@ -443,6 +443,8 @@ mute-replay-warnings
 remote-cert-eku \"TLS Web Server Authentication\"
 remote-cert-tls server
 tls-client
+auth SHA512
+comp-lzo
 verb 3" > /etc/openvpn/client-common.txt
 	# Создаём client.ovpn
 	newclient "$CLIENT"
