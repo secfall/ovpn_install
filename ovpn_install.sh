@@ -299,7 +299,7 @@ ifconfig-pool-persist ipp.txt" > /etc/openvpn/server.conf
 	# DNS
 	case $DNS in
 		1) 
-		# Obtain the resolvers from resolv.conf and use them for OpenVPN
+		# Получакм DNS из resolv.conf и используем их для OpenVPN
 		grep -v '#' /etc/resolv.conf | grep 'nameserver' | grep -E -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | while read line; do
 			echo "push \"dhcp-option DNS $line\"" >> /etc/openvpn/server.conf
 		done
@@ -331,7 +331,7 @@ verb 4" >> /etc/openvpn/server.conf
 	echo "server.conf создан..."
 
 	#Определим названием внешнего интерфейса. Не самый оптимальный вариант, но сходу лучше не придумал
-	IF_EXT=$(ip r l | grep default | cut -d " " -f 5)
+	IF_EXT=$(ip route get 8.8.8.8 | sed -nr 's/.*dev ([^\ ]+).*/\1/p')
 	echo "Определили внешний интерфейс как $IF_EXT..."
 	#Создадим скрипт сетевых настроек. Он будет применятся при каждой перезагрузке
 	echo '#!/bin/sh' > /root/ipt-set
