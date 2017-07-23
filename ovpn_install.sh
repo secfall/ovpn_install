@@ -443,6 +443,7 @@ mute-replay-warnings
 remote-cert-eku \"TLS Web Server Authentication\"
 remote-cert-tls server
 tls-client
+key-direction 1
 auth SHA512
 comp-lzo
 verb 3" > /etc/openvpn/client-common.txt
