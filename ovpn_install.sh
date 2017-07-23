@@ -1,5 +1,5 @@
 #!/bin/bash
-# Универсальный скрипт установки OpenVPN на операционные системы семейства CentOS
+# Скрипт установки OpenVPN на операционные системы семейства CentOS
 
 # Этот скрипт будет работать толко на CentOS и, возможно, на его
 # производных дистрибутивах
@@ -36,7 +36,7 @@ newclient () {
 	cat /etc/openvpn/keys/easy-rsa-master/easyrsa3/pki/ca.crt >> ~/$1.ovpn
 	echo "</ca>" >> ~/$1.ovpn
 	echo "<cert>" >> ~/$1.ovpn
-	cat /etc/openvpn/keys/easy-rsa-master/easyrsa3/pki/pki/issued/$1.crt >> ~/$1.ovpn
+	cat /etc/openvpn/keys/easy-rsa-master/easyrsa3/pki/issued/$1.crt >> ~/$1.ovpn
 	echo "</cert>" >> ~/$1.ovpn
 	echo "<key>" >> ~/$1.ovpn
 	cat /etc/openvpn/keys/easy-rsa-master/easyrsa3/pki/private/$1.key >> ~/$1.ovpn
@@ -112,30 +112,43 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 			echo ""
 			read -p "Вы действительно хотите удалить OpenVPN? [y/n]: " -e -i n REMOVE
 			if [[ "$REMOVE" = 'y' ]]; then
-				PORT=$(grep '^port ' /etc/openvpn/server.conf | cut -d " " -f 2)
-				PROTOCOL=$(grep '^proto ' /etc/openvpn/server.conf | cut -d " " -f 2)
-				if pgrep firewalld; then
-					IP=$(firewall-cmd --direct --get-rules ipv4 nat POSTROUTING | grep '\-s 10.8.0.0/24 '"'"'!'"'"' -d 10.8.0.0/24 -j SNAT --to ' | cut -d " " -f 10)
-					# Использование как постоянных, так и не постоянных правил, чтобы избежать перезагрузки.
-					firewall-cmd --zone=public --remove-port=$PORT/$PROTOCOL
-					firewall-cmd --zone=trusted --remove-source=10.8.0.0/24
-					firewall-cmd --permanent --zone=public --remove-port=$PORT/$PROTOCOL
-					firewall-cmd --permanent --zone=trusted --remove-source=10.8.0.0/24
-					firewall-cmd --direct --remove-rule ipv4 nat POSTROUTING 0 -s 10.8.0.0/24 ! -d 10.8.0.0/24 -j SNAT --to $IP
-					firewall-cmd --permanent --direct --remove-rule ipv4 nat POSTROUTING 0 -s 10.8.0.0/24 ! -d 10.8.0.0/24 -j SNAT --to $IP
-				else
-					IP=$(grep 'iptables -t nat -A POSTROUTING -s 10.8.0.0/24 ! -d 10.8.0.0/24 -j SNAT --to ' $RCLOCAL | cut -d " " -f 14)
-					iptables -t nat -D POSTROUTING -s 10.8.0.0/24 ! -d 10.8.0.0/24 -j SNAT --to $IP
-					sed -i '/iptables -t nat -A POSTROUTING -s 10.8.0.0\/24 ! -d 10.8.0.0\/24 -j SNAT --to /d' $RCLOCAL
-					if iptables -L -n | grep -qE '^ACCEPT'; then
-						iptables -D INPUT -p $PROTOCOL --dport $PORT -j ACCEPT
-						iptables -D FORWARD -s 10.8.0.0/24 -j ACCEPT
-						iptables -D FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
-						sed -i "/iptables -I INPUT -p $PROTOCOL --dport $PORT -j ACCEPT/d" $RCLOCAL
-						sed -i "/iptables -I FORWARD -s 10.8.0.0\/24 -j ACCEPT/d" $RCLOCAL
-						sed -i "/iptables -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT/d" $RCLOCAL
-					fi
-				fi
+				
+				#Правим скрипт сетевых настроек.
+				echo '#!/bin/sh' > /root/ipt-set
+				echo "IF_EXT=\"$IF_EXT\"
+IPT=\"/sbin/iptables\"
+IPT6=\"/sbin/ip6tables\"
+# flush
+\$IPT --flush
+\$IPT -t nat --flush
+\$IPT -t mangle --flush
+\$IPT -X
+\$IPT6 --flush
+# loopback
+\$IPT -A INPUT -i lo -j ACCEPT
+\$IPT -A OUTPUT -o lo -j ACCEPT
+# default
+\$IPT -P INPUT DROP
+\$IPT -P OUTPUT DROP
+\$IPT -P FORWARD DROP
+\$IPT6 -P INPUT DROP
+\$IPT6 -P OUTPUT DROP
+\$IPT6 -P FORWARD DROP
+# allow forwarding" >> /root/ipt-set
+
+				echo 'echo 0 > /proc/sys/net/ipv4/ip_forward' >> /root/ipt-set
+
+				echo '# INPUT chain
+# #########################################
+$IPT -A INPUT -p tcp ! --syn -m state --state NEW -j DROP
+$IPT -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+# ssh
+$IPT -A INPUT -i $IF_EXT -p tcp --dport 22 -j ACCEPT' >> /root/ipt-set
+
+				echo '# OUTPUT chain
+# #########################################
+$IPT -A OUTPUT -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT' >> /root/ipt-set
+				
 				if hash sestatus 2>/dev/null; then
 					if sestatus | grep "Current mode" | grep -qs "enforcing"; then
 						if [[ "$PORT" != '1194' || "$PROTOCOL" = 'tcp' ]]; then
@@ -143,17 +156,14 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 						fi
 					fi
 				fi
-				if [[ "$OS" = 'debian' ]]; then
-					apt-get remove --purge -y openvpn
-				else
-					yum remove openvpn -y
-				fi
+
+				yum remove openvpn -y
 				rm -rf /etc/openvpn
 				echo ""
 				echo "OpenVPN удалён!"
 			else
 				echo ""
-				echo "Не удалось удалить!"
+				echo "Удаление отменено!"
 			fi
 			exit
 			;;
@@ -168,8 +178,9 @@ else
 	echo "Пара вопросов перед началом установки"
 	echo "Вы можете оставлять параметры по умолчанию и просто нажимать «Enter», если они вас устраивают."
 	echo ""
-	echo "Для начала укажите IP адрес, на который OpenVPN будет принимать подкючения"
-	read -p "IP адрес: " -e -i $IP IP
+	echo "Для начала введите IP адрес, на который OpenVPN будет принимать подкючения"
+	echo "Если атоматически опредлённый IP адрес правильный, просто нажмите Enter"
+	read -p "Определён IP адрес: " -e -i $IP IP
 	echo ""
 	echo "Какой протокл будем использовать?"
 	echo "   1) UDP (рекомендуется)"
@@ -185,14 +196,14 @@ else
 	esac
 	echo ""
 	echo "На какой порт будем принимать подключения (443 рекомендуется)?"
-	read -p "Port: " -e -i 443 PORT
+	read -p "Порт: " -e -i 443 PORT
 	echo ""
 	echo "Какой DNS вы хотите использовать в своей VPN?"
 	echo "   1) Текщие системные настройки"
 	echo "   2) Google"
 	read -p "DNS [1-2]: " -e -i 2 DNS
 	echo ""
-	echo "И в завершении укажите имя первого сертификата пользователя"
+	echo "Укажите имя первого сертификата пользователя"
 	echo "Используйте только буквы, никаких спецсимволов"
 	read -p "Имя пользователя: " -e -i client CLIENT
 	echo ""
@@ -200,11 +211,11 @@ else
 	echo "Они ни на что не влияют"
 	echo "В скобках вам будут предложены дефолтные значения"
 	echo "Просто жмите Enter если они вас устраивают"
-	read -p "Регион [Russia]" -e -i Russia EASYRSA_REQ_PROVINCE
-	read -p "Город [Moscow]" -e -i Moscow EASYRSA_REQ_CITY
-	read -p "Название организации [RosComNadzor]" -e -i RosComNadzor EASYRSA_REQ_ORG
-	read -p "E-mail [admin@rkn.ru" -e -i admin@rkn.ru EASYRSA_REQ_EMAIL
-	read -p "Подразделение [OtdelBesnennogoPrintera]" -e -i OtdelBesnennogoPrintera EASYRSA_REQ_OU
+	read -p "Регион [Russia]: " -e -i Russia EASYRSA_REQ_PROVINCE
+	read -p "Город [Moscow]: " -e -i Moscow EASYRSA_REQ_CITY
+	read -p "Название организации [RosComNadzor]: " -e -i RosComNadzor EASYRSA_REQ_ORG
+	read -p "E-mail [admin@rkn.ru]: " -e -i admin@rkn.ru EASYRSA_REQ_EMAIL
+	read -p "Подразделение [OtdelBesnennogoPrintera]: " -e -i OtdelBesnennogoPrintera EASYRSA_REQ_OU
 	echo "Отлично, информации достаточно. Сейчас мы установим OpenVPN сервер"
 	read -n1 -r -p "Нажмите любую кнопку для продолжения..."
 	yum install epel-release -y
@@ -242,7 +253,11 @@ else
 	read -n1 -r -p "Нажмите любую кнопку для продолжения..."
 	./easyrsa --batch build-ca
 	echo "Создаем ключч Диффи-Хелмана..."
-	./easyrsa gen-dh
+	#./easyrsa gen-dh
+	echo "Сейчас будут созданы сертификаты сервера и клиента,"
+	echo "а также список отозваных сертификатов"
+	echo "На запрос key: введите пароль от корневого сертификата.
+	read -n1 -r -p "Нажмите любую кнопку для продолжения..."
 	echo "Создаем сертификат сервера..."
 	./easyrsa build-server-full server nopass
 	echo "Создаем сертификат пользователя..."
@@ -258,7 +273,6 @@ else
 	echo "port $PORT
 proto $PROTOCOL
 dev tun
-
 ca ca.crt
 cert server.crt
 key server.key
@@ -286,7 +300,7 @@ ifconfig-pool-persist ipp.txt" > /etc/openvpn/server.conf
 		echo 'push "dhcp-option DNS 8.8.4.4"' >> /etc/openvpn/server.conf
 		;;
 	esac
-	echo "remote-cert-eku "TLS Web Client Authentication"
+	echo "remote-cert-eku \"TLS Web Client Authentication\"
 keepalive 10 120
 tls-server
 tls-auth ta.key 0
@@ -317,18 +331,15 @@ IF_OVPN=\"tun0\"
 OVPN_PORT=\"$PORT\"
 IPT=\"/sbin/iptables\"
 IPT6=\"/sbin/ip6tables\"
-
 # flush
 \$IPT --flush
 \$IPT -t nat --flush
 \$IPT -t mangle --flush
 \$IPT -X
 \$IPT6 --flush
-
 # loopback
 \$IPT -A INPUT -i lo -j ACCEPT
 \$IPT -A OUTPUT -o lo -j ACCEPT
-
 # default
 \$IPT -P INPUT DROP
 \$IPT -P OUTPUT DROP
@@ -336,7 +347,6 @@ IPT6=\"/sbin/ip6tables\"
 \$IPT6 -P INPUT DROP
 \$IPT6 -P OUTPUT DROP
 \$IPT6 -P FORWARD DROP
-
 # allow forwarding" >> /root/ipt-set
 
 	echo 'echo 1 > /proc/sys/net/ipv4/ip_forward' >> /root/ipt-set
@@ -345,7 +355,6 @@ IPT6=\"/sbin/ip6tables\"
 # #########################################
 # SNAT - local users to out internet
 $IPT -t nat -A POSTROUTING -o $IF_EXT -j MASQUERADE
-
 # INPUT chain
 # #########################################
 $IPT -A INPUT -p tcp ! --syn -m state --state NEW -j DROP
@@ -365,7 +374,6 @@ $IPT -A INPUT -i $IF_OVPN -p udp --dport 53 -s 10.8.0.0/24 -j ACCEPT
 $IPT -A FORWARD -i $IF_OVPN -o $IF_EXT -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
 $IPT -A FORWARD -i $IF_EXT -o $IF_OVPN -m state --state ESTABLISHED,RELATED -j ACCEPT
 $IPT -A FORWARD -s 10.8.0.0/24 -d 10.8.0.0/24 -j ACCEPT
-
 # OUTPUT chain
 # #########################################
 $IPT -A OUTPUT -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT' >> /root/ipt-set
@@ -377,12 +385,10 @@ $IPT -A OUTPUT -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT' >> /root/ipt-
 	echo '[Unit]
 Description=Iptables Settings Service
 After=network.target
-
 [Service]
 Type=oneshot
 User=root
 ExecStart=/root/ipt-set
-
 [Install]
 WantedBy=multi-user.target' > /etc/systemd/system/ipt-settings.service
 	chmod 644 /etc/systemd/system/ipt-settings.service
