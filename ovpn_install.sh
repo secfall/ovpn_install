@@ -1,15 +1,10 @@
 #!/bin/bash
-# Универсальный скрипт установки OpenVPN на операционные системы Debian, Ubuntu и CentOS
+# Универсальный скрипт установки OpenVPN на операционные системы семейства CentOS
 
-# Этот скрипт будет работать на Debian, Ubuntu, CentOS и, возможно, на их
+# Этот скрипт будет работать толко на CentOS и, возможно, на его
 # производных дистрибутивах
 
 
-# Обнаруживаем пользователей Debian, запускающих скрипт с помощью «sh» вместо bash
-if readlink /proc/$$/exe | grep -qs "dash"; then
-	echo "Этот сценарий должен быть запущен с bash, а не shThis script needs to be run with bash, not sh"
-	exit 1
-fi
 
 if [[ "$EUID" -ne 0 ]]; then
 	echo "Этот скрипт нужно запускать с правами root"
@@ -25,16 +20,12 @@ if grep -qs "CentOS release 5" "/etc/redhat-release"; then
 	echo "CentOS 5 слишком старый, установка не возможна"
 	exit 4
 fi
-if [[ -e /etc/debian_version ]]; then
-	OS=debian
-	GROUPNAME=nogroup
-	RCLOCAL='/etc/rc.local'
-elif [[ -e /etc/centos-release || -e /etc/redhat-release ]]; then
+if [[ -e /etc/centos-release || -e /etc/redhat-release ]]; then
 	OS=centos
 	GROUPNAME=nobody
 	RCLOCAL='/etc/rc.d/rc.local'
 else
-	echo "Ваша операционная система не из семейств Debian, Ubuntu или CentOS"
+	echo "Ваша операционная система не из семейства CentOS"
 	exit 5
 fi
 
@@ -42,13 +33,13 @@ newclient () {
 	# Создаем файл client.ovpn
 	cp /etc/openvpn/client-common.txt ~/$1.ovpn
 	echo "<ca>" >> ~/$1.ovpn
-	cat /etc/openvpn/easy-rsa/pki/ca.crt >> ~/$1.ovpn
+	cat /etc/openvpn/keys/easy-rsa-master/easyrsa3/pki/ca.crt >> ~/$1.ovpn
 	echo "</ca>" >> ~/$1.ovpn
 	echo "<cert>" >> ~/$1.ovpn
-	cat /etc/openvpn/easy-rsa/pki/issued/$1.crt >> ~/$1.ovpn
+	cat /etc/openvpn/keys/easy-rsa-master/easyrsa3/pki/pki/issued/$1.crt >> ~/$1.ovpn
 	echo "</cert>" >> ~/$1.ovpn
 	echo "<key>" >> ~/$1.ovpn
-	cat /etc/openvpn/easy-rsa/pki/private/$1.key >> ~/$1.ovpn
+	cat /etc/openvpn/keys/easy-rsa-master/easyrsa3/pki/private/$1.key >> ~/$1.ovpn
 	echo "</key>" >> ~/$1.ovpn
 	echo "<tls-auth>" >> ~/$1.ovpn
 	cat /etc/openvpn/ta.key >> ~/$1.ovpn
@@ -76,58 +67,56 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 		case $option in
 			1) 
 			echo ""
-			echo "Введите имя для сертификата нового клиента"
-			echo "Please, use one word only, no special characters"
-			read -p "Client name: " -e -i client CLIENT
-			cd /etc/openvpn/easy-rsa/
+			echo "Введите имя для сертификата нового пользователя"
+			echo "Используйте только буквы, никаких спецсимволов"
+			read -p "Имя пользователя: " -e -i client CLIENT
+			cd /etc/openvpn/keys/easy-rsa-master/easyrsa3/
 			./easyrsa build-client-full $CLIENT nopass
-			# Generates the custom client.ovpn
+			# Создаем client.ovpn
 			newclient "$CLIENT"
 			echo ""
-			echo "Client $CLIENT added, configuration is available at" ~/"$CLIENT.ovpn"
+			echo "Пользователь $CLIENT добавлен, конфигурационный файл в текушей папке" ~/"$CLIENT.ovpn"
 			exit
 			;;
 			2)
-			# This option could be documented a bit better and maybe even be simplimplified
-			# ...but what can I say, I want some sleep too
-			NUMBEROFCLIENTS=$(tail -n +2 /etc/openvpn/easy-rsa/pki/index.txt | grep -c "^V")
+			# Удаляем пользователя
+			NUMBEROFCLIENTS=$(tail -n +2 /etc/openvpn/keys/easy-rsa-master/easyrsa3/pki/index.txt | grep -c "^V")
 			if [[ "$NUMBEROFCLIENTS" = '0' ]]; then
 				echo ""
-				echo "You have no existing clients!"
+				echo "У сервера нет ни одного пользователя!"
 				exit 6
 			fi
 			echo ""
-			echo "Select the existing client certificate you want to revoke"
-			tail -n +2 /etc/openvpn/easy-rsa/pki/index.txt | grep "^V" | cut -d '=' -f 2 | nl -s ') '
+			echo "Выберите одного из существующих пользователей"
+			tail -n +2 /etc/openvpn/keys/easy-rsa-master/easyrsa3/pki/index.txt | grep "^V" | cut -d '=' -f 2 | nl -s ') '
 			if [[ "$NUMBEROFCLIENTS" = '1' ]]; then
-				read -p "Select one client [1]: " CLIENTNUMBER
+				read -p "Выберите пользователя [1]: " CLIENTNUMBER
 			else
-				read -p "Select one client [1-$NUMBEROFCLIENTS]: " CLIENTNUMBER
+				read -p "Выберите пользователя [1-$NUMBEROFCLIENTS]: " CLIENTNUMBER
 			fi
-			CLIENT=$(tail -n +2 /etc/openvpn/easy-rsa/pki/index.txt | grep "^V" | cut -d '=' -f 2 | sed -n "$CLIENTNUMBER"p)
-			cd /etc/openvpn/easy-rsa/
+			CLIENT=$(tail -n +2 /etc/openvpn/keys/easy-rsa-master/easyrsa3/pki/index.txt | grep "^V" | cut -d '=' -f 2 | sed -n "$CLIENTNUMBER"p)
+			cd /etc/openvpn/keys/easy-rsa-master/easyrsa3/
 			./easyrsa --batch revoke $CLIENT
 			./easyrsa gen-crl
 			rm -rf pki/reqs/$CLIENT.req
 			rm -rf pki/private/$CLIENT.key
 			rm -rf pki/issued/$CLIENT.crt
 			rm -rf /etc/openvpn/crl.pem
-			cp /etc/openvpn/easy-rsa/pki/crl.pem /etc/openvpn/crl.pem
-			# CRL is read with each client connection, when OpenVPN is dropped to nobody
+			cp /etc/openvpn/keys/easy-rsa-master/easyrsa3/pki/crl.pem /etc/openvpn/crl.pem
 			chown nobody:$GROUPNAME /etc/openvpn/crl.pem
 			echo ""
-			echo "Certificate for client $CLIENT revoked"
+			echo "Сертификат пользователя $CLIENT отозван"
 			exit
 			;;
 			3) 
 			echo ""
-			read -p "Do you really want to remove OpenVPN? [y/n]: " -e -i n REMOVE
+			read -p "Вы действительно хотите удалить OpenVPN? [y/n]: " -e -i n REMOVE
 			if [[ "$REMOVE" = 'y' ]]; then
 				PORT=$(grep '^port ' /etc/openvpn/server.conf | cut -d " " -f 2)
 				PROTOCOL=$(grep '^proto ' /etc/openvpn/server.conf | cut -d " " -f 2)
 				if pgrep firewalld; then
 					IP=$(firewall-cmd --direct --get-rules ipv4 nat POSTROUTING | grep '\-s 10.8.0.0/24 '"'"'!'"'"' -d 10.8.0.0/24 -j SNAT --to ' | cut -d " " -f 10)
-					# Using both permanent and not permanent rules to avoid a firewalld reload.
+					# Использование как постоянных, так и не постоянных правил, чтобы избежать перезагрузки.
 					firewall-cmd --zone=public --remove-port=$PORT/$PROTOCOL
 					firewall-cmd --zone=trusted --remove-source=10.8.0.0/24
 					firewall-cmd --permanent --zone=public --remove-port=$PORT/$PROTOCOL
@@ -161,10 +150,10 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 				fi
 				rm -rf /etc/openvpn
 				echo ""
-				echo "OpenVPN removed!"
+				echo "OpenVPN удалён!"
 			else
 				echo ""
-				echo "Removal aborted!"
+				echo "Не удалось удалить!"
 			fi
 			exit
 			;;
@@ -175,18 +164,17 @@ else
 	clear
 	echo 'Начинаем установку OpenVPN вместе с SecFAll.com'
 	echo ""
-	# OpenVPN setup and first user creation
-	echo "I need to ask you a few questions before starting the setup"
-	echo "You can leave the default options and just press enter if you are ok with them"
+	# Установка OpenVPN и создание первого пользователя
+	echo "Пара вопросов перед началом установки"
+	echo "Вы можете оставлять параметры по умолчанию и просто нажимать «Enter», если они вас устраивают."
 	echo ""
-	echo "First I need to know the IPv4 address of the network interface you want OpenVPN"
-	echo "listening to."
-	read -p "IP address: " -e -i $IP IP
+	echo "Для начала укажите IP адрес, на который OpenVPN будет принимать подкючения"
+	read -p "IP адрес: " -e -i $IP IP
 	echo ""
-	echo "Which protocol do you want for OpenVPN connections?"
-	echo "   1) UDP (recommended)"
+	echo "Какой протокл будем использовать?"
+	echo "   1) UDP (рекомендуется)"
 	echo "   2) TCP"
-	read -p "Protocol [1-2]: " -e -i 1 PROTOCOL
+	read -p "Протокол [1-2]: " -e -i 1 PROTOCOL
 	case $PROTOCOL in
 		1) 
 		PROTOCOL=udp
@@ -196,73 +184,95 @@ else
 		;;
 	esac
 	echo ""
-	echo "What port do you want OpenVPN listening to?"
-	read -p "Port: " -e -i 1194 PORT
+	echo "На какой порт будем принимать подключения (443 рекомендуется)?"
+	read -p "Port: " -e -i 443 PORT
 	echo ""
-	echo "Which DNS do you want to use with the VPN?"
-	echo "   1) Current system resolvers"
+	echo "Какой DNS вы хотите использовать в своей VPN?"
+	echo "   1) Текщие системные настройки"
 	echo "   2) Google"
-	echo "   3) OpenDNS"
-	echo "   4) NTT"
-	echo "   5) Hurricane Electric"
-	echo "   6) Verisign"
-	read -p "DNS [1-6]: " -e -i 1 DNS
+	read -p "DNS [1-2]: " -e -i 2 DNS
 	echo ""
-	echo "Finally, tell me your name for the client certificate"
-	echo "Please, use one word only, no special characters"
-	read -p "Client name: " -e -i client CLIENT
+	echo "И в завершении укажите имя первого сертификата пользователя"
+	echo "Используйте только буквы, никаких спецсимволов"
+	read -p "Имя пользователя: " -e -i client CLIENT
 	echo ""
-	echo "Okay, that was all I needed. We are ready to setup your OpenVPN server now"
-	read -n1 -r -p "Press any key to continue..."
-	if [[ "$OS" = 'debian' ]]; then
-		apt-get update
-		apt-get install openvpn iptables openssl ca-certificates -y
-	else
-		# Else, the distro is CentOS
-		yum install epel-release -y
-		yum install openvpn iptables openssl wget ca-certificates -y
-	fi
-	# An old version of easy-rsa was available by default in some openvpn packages
+	echo "А теперь введите начальные данные для корневого сертификата"
+	echo "Они ни на что не влияют"
+	echo "В скобках вам будут предложены дефолтные значения"
+	echo "Просто жмите Enter если они вас устраивают"
+	read -p "Регион [Russia]" -e -i Russia EASYRSA_REQ_PROVINCE
+	read -p "Город [Moscow]" -e -i Moscow EASYRSA_REQ_CITY
+	read -p "Название организации [RosComNadzor]" -e -i RosComNadzor EASYRSA_REQ_ORG
+	read -p "E-mail [admin@rkn.ru" -e -i admin@rkn.ru EASYRSA_REQ_EMAIL
+	read -p "Подразделение [OtdelBesnennogoPrintera]" -e -i OtdelBesnennogoPrintera EASYRSA_REQ_OU
+	echo "Отлично, информации достаточно. Сейчас мы установим OpenVPN сервер"
+	read -n1 -r -p "Нажмите любую кнопку для продолжения..."
+	yum install epel-release -y
+	yum update -y
+	yum upgrade -y
+	yum install openvpn iptables wget zip unzip -y
+	# Удаляем старые версииf easy-rsa
 	if [[ -d /etc/openvpn/easy-rsa/ ]]; then
 		rm -rf /etc/openvpn/easy-rsa/
 	fi
-	# Get easy-rsa
-	wget -O ~/EasyRSA-3.0.1.tgz "https://github.com/OpenVPN/easy-rsa/releases/download/3.0.1/EasyRSA-3.0.1.tgz"
-	tar xzf ~/EasyRSA-3.0.1.tgz -C ~/
-	mv ~/EasyRSA-3.0.1/ /etc/openvpn/
-	mv /etc/openvpn/EasyRSA-3.0.1/ /etc/openvpn/easy-rsa/
-	chown -R root:root /etc/openvpn/easy-rsa/
-	rm -rf ~/EasyRSA-3.0.1.tgz
-	cd /etc/openvpn/easy-rsa/
-	# Create the PKI, set up the CA, the DH params and the server + client certificates
+	if [[ -d /etc/openvpn/keys/ ]]; then
+		rm -rf /etc/openvpn/keys/
+	fi
+	# Скачиваем и распаковываем easy-rsa
+	mkdir /etc/openvpn/keys
+	cd /etc/openvpn/keys
+	wget https://github.com/OpenVPN/easy-rsa/archive/master.zip
+	unzip master.zip
+	cd /etc/openvpn/keys/easy-rsa-master/easyrsa3
+	# Создадим файл с настройками
+	cp vars.example vars
+	# Засунем в него дефолтные поля сертификата
+	echo 'set_var EASYRSA_REQ_PROVINCE "$EASYRSA_REQ_PROVINCE"' >> /etc/openvpn/keys/easy-rsa-master/easyrsa3/vars
+	echo 'set_var EASYRSA_REQ_CITY "$EASYRSA_REQ_CITY"' >> /etc/openvpn/keys/easy-rsa-master/easyrsa3/vars
+	echo 'set_var EASYRSA_REQ_ORG "$EASYRSA_REQ_ORG"' >> /etc/openvpn/keys/easy-rsa-master/easyrsa3/vars
+	echo 'set_var EASYRSA_REQ_EMAILE "$EASYRSA_REQ_EMAIL"' >> /etc/openvpn/keys/easy-rsa-master/easyrsa3/vars
+	echo 'set_var EASYRSA_REQ_OU "$EASYRSA_REQ_OU"' >> /etc/openvpn/keys/easy-rsa-master/easyrsa3/vars
+	echo 'set_var EASYRSA_KEY_SIZE "4096"' >> /etc/openvpn/keys/easy-rsa-master/easyrsa3/vars
+	echo 'set_var EASYRSA_DIGEST "sha256"' >> /etc/openvpn/keys/easy-rsa-master/easyrsa3/vars
+	# Создаём PKI, создаём CA, ключ DH а также сертификаты сервера и клиента
 	./easyrsa init-pki
-	./easyrsa --batch build-ca nopass
+	echo "Сейчас будет создан корневой сертификат"
+	echo "На запрос Enter Pem pass phrase пароля придумайте и "
+	echo "введите сложный пароль два раза. После кажждого ввода жмите Enter"
+	read -n1 -r -p "Нажмите любую кнопку для продолжения..."
+	./easyrsa --batch build-ca
+	echo "Создаем ключч Диффи-Хелмана..."
 	./easyrsa gen-dh
+	echo "Создаем сертификат сервера..."
 	./easyrsa build-server-full server nopass
+	echo "Создаем сертификат пользователя..."
 	./easyrsa build-client-full $CLIENT nopass
+	echo "Создаем список отозваных сертификатов..."
 	./easyrsa gen-crl
-	# Move the stuff we need
+	# Готовые сертификаты в рабочую папку сервера
 	cp pki/ca.crt pki/private/ca.key pki/dh.pem pki/issued/server.crt pki/private/server.key pki/crl.pem /etc/openvpn
-	# CRL is read with each client connection, when OpenVPN is dropped to nobody
 	chown nobody:$GROUPNAME /etc/openvpn/crl.pem
-	# Generate key for tls-auth
+	echo "Создаем ключ tls-auth..."
 	openvpn --genkey --secret /etc/openvpn/ta.key
-	# Generate server.conf
+	echo "Настраиваем сервер..."
 	echo "port $PORT
 proto $PROTOCOL
 dev tun
-sndbuf 0
-rcvbuf 0
+
 ca ca.crt
 cert server.crt
 key server.key
 dh dh.pem
-auth SHA512
-tls-auth ta.key 0
-topology subnet
+crl-verify crl.pem
+ca ca.crt
+cert server.crt
+key server.key
+dh dh.pem
+crl-verify crl.pem
+ 
 server 10.8.0.0 255.255.255.0
-ifconfig-pool-persist ipp.txt" > /etc/openvpn/server.conf
-	echo 'push "redirect-gateway def1 bypass-dhcp"' >> /etc/openvpn/server.conf
+ifconfig-pool-persist ipp.txt" >> /etc/openvpn/server.conf
+	echo 'push "redirect-gateway def1" ' >> /etc/openvpn/server.conf
 	# DNS
 	case $DNS in
 		1) 
@@ -275,32 +285,90 @@ ifconfig-pool-persist ipp.txt" > /etc/openvpn/server.conf
 		echo 'push "dhcp-option DNS 8.8.8.8"' >> /etc/openvpn/server.conf
 		echo 'push "dhcp-option DNS 8.8.4.4"' >> /etc/openvpn/server.conf
 		;;
-		3)
-		echo 'push "dhcp-option DNS 208.67.222.222"' >> /etc/openvpn/server.conf
-		echo 'push "dhcp-option DNS 208.67.220.220"' >> /etc/openvpn/server.conf
-		;;
-		4) 
-		echo 'push "dhcp-option DNS 129.250.35.250"' >> /etc/openvpn/server.conf
-		echo 'push "dhcp-option DNS 129.250.35.251"' >> /etc/openvpn/server.conf
-		;;
-		5) 
-		echo 'push "dhcp-option DNS 74.82.42.42"' >> /etc/openvpn/server.conf
-		;;
-		6) 
-		echo 'push "dhcp-option DNS 64.6.64.6"' >> /etc/openvpn/server.conf
-		echo 'push "dhcp-option DNS 64.6.65.6"' >> /etc/openvpn/server.conf
-		;;
 	esac
-	echo "keepalive 10 120
+	echo "remote-cert-eku "TLS Web Client Authentication"
+keepalive 10 120
+tls-server
+tls-auth ta.key 0
+tls-timeout 120
+auth SHA512
 cipher AES-256-CBC
 comp-lzo
+max-clients 10
+ 
 user nobody
-group $GROUPNAME
+group nobody
+ 
 persist-key
 persist-tun
+ 
 status openvpn-status.log
-verb 3
-crl-verify crl.pem" >> /etc/openvpn/server.conf
+log openvpn.log
+verb 4" >> /etc/openvpn/server.conf
+
+	#Создадим файл ipt-set
+	#Определим названием внешенего интерфейса. Не самый оптимальный вариант, но сходу лучше не придумал
+	IF_EXT=$(ip r l | grep default | cut -d " " -f 5)
+	echo "#!/bin/sh
+IF_EXT="$IF_EXT"
+IF_OVPN="tun0"
+OVPN_PORT="$PORT"
+IPT="/sbin/iptables"
+IPT6="/sbin/ip6tables"
+
+# flush
+$IPT --flush
+$IPT -t nat --flush
+$IPT -t mangle --flush
+$IPT -X
+$IPT6 --flush
+
+# loopback
+$IPT -A INPUT -i lo -j ACCEPT
+$IPT -A OUTPUT -o lo -j ACCEPT
+
+# default
+$IPT -P INPUT DROP
+$IPT -P OUTPUT DROP
+$IPT -P FORWARD DROP
+$IPT6 -P INPUT DROP
+$IPT6 -P OUTPUT DROP
+$IPT6 -P FORWARD DROP
+
+# allow forwarding
+echo 1 > /proc/sys/net/ipv4/ip_forward
+
+# NAT
+# #########################################
+# SNAT - local users to out internet
+$IPT -t nat -A POSTROUTING -o $IF_EXT -j MASQUERADE
+
+# INPUT chain
+# #########################################
+$IPT -A INPUT -p tcp ! --syn -m state --state NEW -j DROP
+$IPT -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+# ssh
+$IPT -A INPUT -i $IF_EXT -p tcp --dport 22 -j ACCEPT
+# VPN
+$IPT -A INPUT -i $IF_OVPN -p icmp -s 10.8.0.0/24 -j ACCEPT
+# DNS
+$IPT -A INPUT -i $IF_OVPN -p udp --dport 53 -s 10.8.0.0/24 -j ACCEPT
+# openvpn
+$IPT -A INPUT -i $IF_EXT -p udp --dport $OVPN_PORT -j ACCEPT
+# squid
+$IPT -A INPUT -i $IF_OVPN -p tcp --dport $SQUID_PORT -j ACCEPT
+$IPT -A INPUT -i $IF_OVPN -p udp --dport $SQUID_PORT -j ACCEPT
+
+# FORWARD chain
+# #########################################
+$IPT -A FORWARD -i $IF_OVPN -o $IF_EXT -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+$IPT -A FORWARD -i $IF_EXT -o $IF_OVPN -m state --state ESTABLISHED,RELATED -j ACCEPT
+$IPT -A FORWARD -s 10.8.0.0/24 -d 10.8.0.0/24 -j ACCEPT
+
+# OUTPUT chain
+# #########################################
+$IPT -A OUTPUT -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+
 	# Enable net.ipv4.ip_forward for the system
 	sed -i '/\<net.ipv4.ip_forward\>/c\net.ipv4.ip_forward=1' /etc/sysctl.conf
 	if ! grep -q "\<net.ipv4.ip_forward\>" /etc/sysctl.conf; then
@@ -321,11 +389,6 @@ crl-verify crl.pem" >> /etc/openvpn/server.conf
 		firewall-cmd --direct --add-rule ipv4 nat POSTROUTING 0 -s 10.8.0.0/24 ! -d 10.8.0.0/24 -j SNAT --to $IP
 		firewall-cmd --permanent --direct --add-rule ipv4 nat POSTROUTING 0 -s 10.8.0.0/24 ! -d 10.8.0.0/24 -j SNAT --to $IP
 	else
-		# Needed to use rc.local with some systemd distros
-		if [[ "$OS" = 'debian' && ! -e $RCLOCAL ]]; then
-			echo '#!/bin/sh -e
-exit 0' > $RCLOCAL
-		fi
 		chmod +x $RCLOCAL
 		# Set NAT for the VPN subnet
 		iptables -t nat -A POSTROUTING -s 10.8.0.0/24 ! -d 10.8.0.0/24 -j SNAT --to $IP
