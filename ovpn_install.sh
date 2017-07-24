@@ -61,8 +61,9 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 		echo "Что вы хотите сделать?"
 		echo "   1) Добавить пользователя"
 		echo "   2) Удалить сущетвующего пользвателя"
-		echo "   3) Удалить OpenVPN"
-		echo "   4) Завершить работу скрипта"
+		echo "   3) Установить прозрачный 3proxy
+		echo "   4) Удалить OpenVPN"
+		echo "   5) Завершить работу скрипта"
 		read -p "Выберите вариант [1-4]: " option
 		case $option in
 			1) 
@@ -108,7 +109,179 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 			echo "Сертификат пользователя $CLIENT отозван"
 			exit
 			;;
-			3) 
+			3)
+			# Устанавливаем прозрачный 3proxy
+			echo ""
+			echo "Устанавливаем прозрачный 3proxy..."
+			echo "Какой DNS вы хотите использовать в своей VPN?"
+			echo "   1) Текущие системные настройки"
+			echo "   2) Google"
+			read -p "DNS [1-2]: " -e -i 2 DNS
+			yum -y install gcc
+			cd /tmp/
+			wget https://github.com/z3APA3A/3proxy/archive/0.8.10.tar.gz
+			tar -xvzf 0.8.10.tar.gz
+			cd 3proxy-0.8.10
+			sed -i '1s/^/#define ANONYMOUS 1\n/' ./src/proxy.h
+			make -f Makefile.Linux
+			mkdir -p /opt/3proxy/bin
+			touch /opt/3proxy/3proxy.pid
+			cp ./src/3proxy /opt/3proxy/bin
+			cp ./src/TransparentPlugin.ld.so /opt/3proxy/bin
+			cp ./cfg/3proxy.cfg.sample /opt/3proxy/3proxy.cfg
+			#Делаем скрипт управления службой 3proxy
+			echo '#!/bin/sh
+#
+# chkconfig: 2345 20 80
+# description: 3proxy tiny proxy server
+#              
+#
+# 
+#
+
+case "$1" in
+   start)    
+       echo Starting 3Proxy
+   
+       /opt/3proxy/bin/3proxy /opt/3proxy/3proxy.cfg
+   
+       RETVAL=$?
+       echo
+       [ $RETVAL ]    
+       ;;
+
+   stop)
+       echo Stopping 3Proxy
+       if [ /opt/3proxy/3proxy.pid ]; then
+	       /bin/kill `cat /opt/3proxy/3proxy.pid`
+       else
+               /usr/bin/killall 3proxy
+       fi
+   
+       RETVAL=$?
+       echo
+       [ $RETVAL ]
+       ;;
+
+   restart|reload)
+       echo Reloading 3Proxy
+       if [ /opt/3proxy/3proxy.pid ]; then
+	       /bin/kill -s USR1 `cat /opt/3proxy/3proxy.pid`
+       else
+               /usr/bin/killall -s USR1 3proxy
+       fi
+       ;;
+
+
+   *)
+       echo Usage: $0 "{start|stop|restart}"
+       exit 1
+esac
+exit 0' > /etc/rc.d/init.d/3proxy
+			chmod 0755 /etc/rc.d/init.d/3proxy
+			#Изменим файл ipt-set
+			echo '#!/bin/sh' > /root/ipt-set
+			echo "IF_EXT=\"$IF_EXT\"
+IF_OVPN=\"tun0\"
+OVPN_PORT=\"$PORT\"
+PROXI_PORT=\"8080\"
+IPT=\"/sbin/iptables\"
+IPT6=\"/sbin/ip6tables\"
+# flush
+\$IPT --flush
+\$IPT -t nat --flush
+\$IPT -t mangle --flush
+\$IPT -X
+\$IPT6 --flush
+# loopback
+\$IPT -A INPUT -i lo -j ACCEPT
+\$IPT -A OUTPUT -o lo -j ACCEPT
+# default
+\$IPT -P INPUT DROP
+\$IPT -P OUTPUT DROP
+\$IPT -P FORWARD DROP
+\$IPT6 -P INPUT DROP
+\$IPT6 -P OUTPUT DROP
+\$IPT6 -P FORWARD DROP
+# allow forwarding" >> /root/ipt-set
+
+	echo 'echo 1 > /proc/sys/net/ipv4/ip_forward' >> /root/ipt-set
+
+	echo '# NAT
+# #########################################
+# SNAT - local users to out internet
+$IPT -t nat -A POSTROUTING -o $IF_EXT -j MASQUERADE
+# INPUT chain
+# #########################################
+$IPT -A INPUT -p tcp ! --syn -m state --state NEW -j DROP
+$IPT -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+# ssh
+$IPT -A INPUT -i $IF_EXT -p tcp --dport 22 -j ACCEPT
+# VPN
+$IPT -A INPUT -i $IF_OVPN -p icmp -s 10.8.0.0/24 -j ACCEPT
+# DNS
+$IPT -A INPUT -i $IF_OVPN -p udp --dport 53 -s 10.8.0.0/24 -j ACCEPT
+# openvpn' >> /root/ipt-set
+
+	echo "\$IPT -A INPUT -i \$IF_EXT -p $PROTOCOL --dport \$OVPN_PORT -j ACCEPT" >> /root/ipt-set
+
+	echo '# proxi
+$IPT -A INPUT -i $IF_OVPN -p tcp --dport $PROXI_PORT -j ACCEPT
+$IPT -A INPUT -i $IF_OVPN -p udp --dport $PROXI_PORT -j ACCEPT
+$IPT -t nat -A PREROUTING -i $IF_OVPN -p tcp -m tcp --dport 80 -j DNAT --to-destination 10.8.0.1:$PROXI_PORT
+$IPT -t nat -A PREROUTING -i $IF_OVPN -p tcp -m tcp --dport 443 -j DNAT --to-destination 10.8.0.1:$PROXI_PORT
+# FORWARD chain
+# #########################################
+$IPT -A FORWARD -i $IF_OVPN -o $IF_EXT -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+$IPT -A FORWARD -i $IF_EXT -o $IF_OVPN -m state --state ESTABLISHED,RELATED -j ACCEPT
+$IPT -A FORWARD -s 10.8.0.0/24 -d 10.8.0.0/24 -j ACCEPT
+# OUTPUT chain
+# #########################################
+$IPT -A OUTPUT -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT' >> /root/ipt-set
+
+			#Установим права на запуск
+			chmod 755 /root/ipt-set
+			#И применим настройки
+			systemctl restart ipt-settings
+			echo "Файл ipt-set обновлён..."
+			#Делаем конфиг 3proxy
+			echo 'daemon
+pidfile /opt/3proxy/3proxy.pid
+plugin /opt/3proxy/bin/TransparentPlugin.ld.so transparent_plugin' > /opt/3proxy/3proxy.cfg
+			# DNS для 3proxy
+			case $DNS in
+				1) 
+				# Получаем DNS из resolv.conf и используем их для 3proxy
+				grep -v '#' /etc/resolv.conf | grep 'nameserver' | grep -E -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | while read line; do
+				echo "nserver $line" >> /opt/3proxy/3proxy.cfg
+				done
+				;;
+				2) 
+				echo 'nserver 8.8.8.8' >> /opt/3proxy/3proxy.cfg
+				echo 'nserver 8.8.4.4' >> /opt/3proxy/3proxy.cfg
+				;;
+			esac
+			echo 'nscache 65536
+
+timeouts 1 5 30 60 180 1800 15 60
+
+#log /dev/null
+#log /etc/3proxy/3proxy.log D
+#logformat "- +_L%t.%.  %N.%p %E %U %C:%c %R:%r %O %I %h %T"' >> /opt/3proxy/3proxy.cfg
+			echo "external $IP" >> /opt/3proxy/3proxy.cfg
+			echo 'internal 10.8.0.1
+
+auth none
+maxconn 64
+
+allow *
+parent 1000 http 0.0.0.0 0
+allow *
+parent 1000 socks5 0.0.0.0 0
+tcppm -i10.8.0.1 8080 127.0.0.1 11111' >> /opt/3proxy/3proxy.cfg
+			service 3proxy restart
+			echo "Прозрачный 3proxy установлен и запущен"
+			4) 
 			echo ""
 			read -p "Вы действительно хотите удалить OpenVPN? [y/n]: " -e -i n REMOVE
 			if [[ "$REMOVE" = 'y' ]]; then
@@ -149,6 +322,11 @@ $IPT -A INPUT -i $IF_EXT -p tcp --dport 22 -j ACCEPT' >> /root/ipt-set
 # #########################################
 $IPT -A OUTPUT -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT' >> /root/ipt-set
 				
+				#Установим права на запуск
+				chmod 755 /root/ipt-set
+				#И применим настройки
+				systemctl restart ipt-settings
+				echo "Файл ipt-set обновлён..."
 				if hash sestatus 2>/dev/null; then
 					if sestatus | grep "Current mode" | grep -qs "enforcing"; then
 						if [[ "$PORT" != '1194' || "$PROTOCOL" = 'tcp' ]]; then
@@ -167,7 +345,7 @@ $IPT -A OUTPUT -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT' >> /root/ipt-
 			fi
 			exit
 			;;
-			4) exit;;
+			5) exit;;
 		esac
 	done
 else
