@@ -411,7 +411,7 @@ else
 	read -n1 -r -p "Нажмите любую кнопку для продолжения..."
 	yum install epel-release -y
 	yum update -y
-	#yum upgrade -y
+	yum upgrade -y
 	yum install openvpn openssl iptables wget zip unzip -y
 	# Удаляем старые версииf easy-rsa
 	if [[ -d /etc/openvpn/easy-rsa/ ]]; then
@@ -434,7 +434,7 @@ else
 	echo 'set_var EASYRSA_REQ_ORG "$EASYRSA_REQ_ORG"' >> /etc/openvpn/keys/easy-rsa-master/easyrsa3/vars
 	echo 'set_var EASYRSA_REQ_EMAILE "$EASYRSA_REQ_EMAIL"' >> /etc/openvpn/keys/easy-rsa-master/easyrsa3/vars
 	echo 'set_var EASYRSA_REQ_OU "$EASYRSA_REQ_OU"' >> /etc/openvpn/keys/easy-rsa-master/easyrsa3/vars
-	echo 'set_var EASYRSA_KEY_SIZE "2048"' >> /etc/openvpn/keys/easy-rsa-master/easyrsa3/vars
+	echo 'set_var EASYRSA_KEY_SIZE "4096"' >> /etc/openvpn/keys/easy-rsa-master/easyrsa3/vars
 	echo 'set_var EASYRSA_DIGEST "sha256"' >> /etc/openvpn/keys/easy-rsa-master/easyrsa3/vars
 	# Создаём PKI, создаём CA, ключ DH а также сертификаты сервера и клиента
 	./easyrsa init-pki
