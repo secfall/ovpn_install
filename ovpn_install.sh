@@ -64,7 +64,7 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 		echo "   3) Установить прозрачный 3proxy"
 		echo "   4) Удалить OpenVPN"
 		echo "   5) Завершить работу скрипта"
-		read -p "Выберите вариант [1-4]: " option
+		read -p "Выберите вариант [1-5]: " option
 		case $option in
 			1) 
 			clear
