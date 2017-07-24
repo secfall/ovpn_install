@@ -619,6 +619,7 @@ remote-cert-tls server
 tls-client
 key-direction 1
 auth SHA512
+cipher AES-256-CBC
 comp-lzo
 verb 3" > /etc/openvpn/client-common.txt
 	# Создаём client.ovpn
