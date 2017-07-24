@@ -1,4 +1,4 @@
-<b>SecFAll.com</b><br>
+<b><a href="https://secfall.com">SecFAll.com</a></b><br>
 <br>
 Скрипт атоматической установки и настройки OpenVPN сервера и прозрачного прокси-сервера 3Proxy.
 Рекомендации и инструкции по выбору виртуального сервера можно найти здесь https://secfall.com/anonimnost-v-internete-svoimi-rukami-vyibor-hostinga-i-arenda-vps/
