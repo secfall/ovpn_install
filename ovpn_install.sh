@@ -184,7 +184,7 @@ exit 0' > /etc/rc.d/init.d/3proxy
 			#Определим названием внешнего интерфейса из текущего файла ipt-set
 			IF_EXT=$(grep IF_EXT= /root/ipt-set | awk -F\" '{print $2}')
 			#Определим порт OVPN из текущего файла ipt-set
-			IF_EXT=$(grep OVPN_PORT= /root/ipt-set | awk -F\" '{print $2}')
+			PORT=$(grep OVPN_PORT= /root/ipt-set | awk -F\" '{print $2}')
 			#Определим протокол OVPN из текущего файла ipt-set
 			PROTOCOL=$(grep 'dport $OVPN_PORT -j ACCEPT' /root/ipt-set | awk '{print $7}')
 			#Изменим файл ipt-set
