@@ -281,6 +281,7 @@ parent 1000 socks5 0.0.0.0 0
 tcppm -i10.8.0.1 8080 127.0.0.1 11111' >> /opt/3proxy/3proxy.cfg
 			service 3proxy restart
 			echo "Прозрачный 3proxy установлен и запущен"
+			;;
 			4) 
 			echo ""
 			read -p "Вы действительно хотите удалить OpenVPN? [y/n]: " -e -i n REMOVE
