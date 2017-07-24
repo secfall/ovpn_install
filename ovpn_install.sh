@@ -67,6 +67,7 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 		read -p "Выберите вариант [1-4]: " option
 		case $option in
 			1) 
+			clear
 			echo ""
 			echo "Введите имя для сертификата нового пользователя"
 			echo "Используйте только буквы, никаких спецсимволов"
@@ -111,6 +112,7 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 			;;
 			3)
 			# Устанавливаем прозрачный 3proxy
+			clear
 			echo ""
 			echo "Устанавливаем прозрачный 3proxy..."
 			echo "Какой DNS вы хотите использовать в своей VPN?"
@@ -205,9 +207,8 @@ IPT6=\"/sbin/ip6tables\"
 \$IPT6 -P FORWARD DROP
 # allow forwarding" >> /root/ipt-set
 
-	echo 'echo 1 > /proc/sys/net/ipv4/ip_forward' >> /root/ipt-set
-
-	echo '# NAT
+			echo 'echo 1 > /proc/sys/net/ipv4/ip_forward' >> /root/ipt-set
+			echo '# NAT
 # #########################################
 # SNAT - local users to out internet
 $IPT -t nat -A POSTROUTING -o $IF_EXT -j MASQUERADE
@@ -223,9 +224,8 @@ $IPT -A INPUT -i $IF_OVPN -p icmp -s 10.8.0.0/24 -j ACCEPT
 $IPT -A INPUT -i $IF_OVPN -p udp --dport 53 -s 10.8.0.0/24 -j ACCEPT
 # openvpn' >> /root/ipt-set
 
-	echo "\$IPT -A INPUT -i \$IF_EXT -p $PROTOCOL --dport \$OVPN_PORT -j ACCEPT" >> /root/ipt-set
-
-	echo '# proxi
+			echo "\$IPT -A INPUT -i \$IF_EXT -p $PROTOCOL --dport \$OVPN_PORT -j ACCEPT" >> /root/ipt-set
+			echo '# proxi
 $IPT -A INPUT -i $IF_OVPN -p tcp --dport $PROXI_PORT -j ACCEPT
 $IPT -A INPUT -i $IF_OVPN -p udp --dport $PROXI_PORT -j ACCEPT
 $IPT -t nat -A PREROUTING -i $IF_OVPN -p tcp -m tcp --dport 80 -j DNAT --to-destination 10.8.0.1:$PROXI_PORT
