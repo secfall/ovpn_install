@@ -168,9 +168,9 @@ case "$1" in
    restart|reload)
        echo Reloading 3Proxy
        if [ /opt/3proxy/3proxy.pid ]; then
-	       /bin/kill -s USR1 `cat /opt/3proxy/3proxy.pid`
+	       /bin/kill `cat /opt/3proxy/3proxy.pid`
        else
-               /usr/bin/killall -s USR1 3proxy
+               /usr/bin/killall 3proxy
        fi
        ;;
 
