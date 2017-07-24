@@ -181,6 +181,12 @@ case "$1" in
 esac
 exit 0' > /etc/rc.d/init.d/3proxy
 			chmod 0755 /etc/rc.d/init.d/3proxy
+			#Определим названием внешнего интерфейса из текущего файла ipt-set
+			IF_EXT=$(grep IF_EXT= /root/ipt-set | awk -F\" '{print $2}')
+			#Определим порт OVPN из текущего файла ipt-set
+			IF_EXT=$(grep OVPN_PORT= /root/ipt-set | awk -F\" '{print $2}')
+			#Определим протокол OVPN из текущего файла ipt-set
+			PROTOCOL=$(grep 'dport $OVPN_PORT -j ACCEPT' /root/ipt-set | awk '{print $7}')
 			#Изменим файл ipt-set
 			echo '#!/bin/sh' > /root/ipt-set
 			echo "IF_EXT=\"$IF_EXT\"
@@ -280,13 +286,15 @@ allow *
 parent 1000 socks5 0.0.0.0 0
 tcppm -i10.8.0.1 8080 127.0.0.1 11111' >> /opt/3proxy/3proxy.cfg
 			service 3proxy restart
+			/sbin/chkconfig 3proxy on
 			echo "Прозрачный 3proxy установлен и запущен"
 			;;
 			4) 
 			echo ""
 			read -p "Вы действительно хотите удалить OpenVPN? [y/n]: " -e -i n REMOVE
 			if [[ "$REMOVE" = 'y' ]]; then
-				
+				#Определим названием внешнего интерфейса из текущего файла ipt-set
+				IF_EXT=$(grep IF_EXT= /root/ipt-set | awk -F\" '{print $2}')
 				#Правим скрипт сетевых настроек.
 				echo '#!/bin/sh' > /root/ipt-set
 				echo "IF_EXT=\"$IF_EXT\"
