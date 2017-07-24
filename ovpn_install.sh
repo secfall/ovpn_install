@@ -285,7 +285,8 @@ parent 1000 http 0.0.0.0 0
 allow *
 parent 1000 socks5 0.0.0.0 0
 tcppm -i10.8.0.1 8080 127.0.0.1 11111' >> /opt/3proxy/3proxy.cfg
-			service 3proxy restart
+			/usr/bin/killall 3proxy
+			service 3proxy start
 			/sbin/chkconfig 3proxy on
 			echo "Прозрачный 3proxy установлен и запущен"
 			read -n1 -r -p "Нажмите любую кнопку для продолжения..."
