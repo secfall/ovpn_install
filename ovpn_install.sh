@@ -288,6 +288,7 @@ tcppm -i10.8.0.1 8080 127.0.0.1 11111' >> /opt/3proxy/3proxy.cfg
 			service 3proxy restart
 			/sbin/chkconfig 3proxy on
 			echo "Прозрачный 3proxy установлен и запущен"
+			read -n1 -r -p "Нажмите любую кнопку для продолжения..."
 			;;
 			4) 
 			echo ""
