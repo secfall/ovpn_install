@@ -466,11 +466,6 @@ cert server.crt
 key server.key
 dh dh.pem
 crl-verify crl.pem
-ca ca.crt
-cert server.crt
-key server.key
-dh dh.pem
-crl-verify crl.pem
  
 server 10.8.0.0 255.255.255.0
 ifconfig-pool-persist ipp.txt" > /etc/openvpn/server.conf
