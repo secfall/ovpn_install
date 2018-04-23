@@ -124,9 +124,9 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 			read -p "DNS [1-2]: " -e -i 2 DNS
 			yum -y install gcc
 			cd /tmp/
-			wget https://github.com/z3APA3A/3proxy/archive/0.8.10.tar.gz
-			tar -xvzf 0.8.10.tar.gz
-			cd 3proxy-0.8.10
+			wget https://github.com/z3APA3A/3proxy/archive/0.8.12.tar.gz
+			tar -xvzf 0.8.12.tar.gz
+			cd 3proxy-0.8.12
 			sed -i '1s/^/#define ANONYMOUS 1\n/' ./src/proxy.h
 			make -f Makefile.Linux
 			mkdir -p /opt/3proxy/bin
